@@ -713,7 +713,7 @@ rating_sentiment %>%
 
 ## 9. Key Findings
 
-- The dataset contains 21,739 Starbucks reviews from 730 Starbucks businesses in the Yelp Open Dataset. The rating distribution is polarized, with 1-star and 5-star reviews representing the largest rating groups.
+- The dataset contains 21,739 Starbucks reviews from 730 Starbucks businesses in the Yelp Open Dataset. The rating distribution shows that 1-star and 5-star reviews were the largest rating groups.
 
 - Mean review length varied across rating levels. For example, 2-star reviews averaged approximately 93 words, while 5-star reviews averaged approximately 66 words.
 
@@ -749,7 +749,7 @@ Finally, the analysis is primarily descriptive and focuses on associations betwe
 
 This project analyzed 21,739 Starbucks customer reviews from the Yelp Open Dataset using text mining and sentiment analysis techniques in R. The analysis examined review ratings, review length, word frequencies, TF-IDF scores, and lexicon-based sentiment measures to identify patterns in customer reviews.
 
-The results showed a moderate positive association between star ratings and AFINN sentiment scores. Mean AFINN sentiment scores increased across the rating levels, ranging from −3.22 for 1-star reviews to 6.31 for 5-star reviews, while the Spearman correlation between star ratings and sentiment scores was 0.639. However, the comparison between star ratings and AFINN sentiment classifications also showed that the two measures did not always agree, highlighting the limitations of automated lexicon-based sentiment analysis.
+The results showed a Spearman correlation of 0.639 between star ratings and AFINN sentiment scores. Mean AFINN sentiment scores increased across the rating levels, ranging from −3.22 for 1-star reviews to 6.31 for 5-star reviews, while the Spearman correlation between star ratings and sentiment scores was 0.639. However, the comparison between star ratings and AFINN sentiment classifications also showed that the two measures did not always agree, highlighting the limitations of automated lexicon-based sentiment analysis.
 
 The TF-IDF analysis identified vocabulary that was distinctive across rating groups, while the NRC analysis revealed differences in the distribution of emotion-related word categories across these groups. Together, these analyses demonstrate how different text-mining and sentiment-analysis methods can provide complementary perspectives on customer reviews. At the same time, the findings should be interpreted in the context of the dataset and the limitations of lexicon-based methods.
 
