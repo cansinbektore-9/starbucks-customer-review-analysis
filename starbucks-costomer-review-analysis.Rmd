@@ -1,0 +1,760 @@
+# Starbucks Customer Reviews
+
+## Sentiment and Text Analysis Using R
+
+```{r load-packages}
+library(tidyverse)
+library(tidytext)
+```
+
+## 1. Introduction
+
+This project analyzes Starbucks customer reviews from the Yelp Open Dataset using text mining and sentiment analysis techniques in R. The analysis focuses on identifying patterns in customer reviews by examining star ratings, review length, word frequencies, TF-IDF scores, and lexicon-based sentiment measures.
+
+The project combines descriptive analysis with AFINN and NRC lexicons to examine sentiment and emotion-related vocabulary across different rating groups. The aim is to demonstrate how text-based customer review data can be processed and analyzed in R to identify textual patterns and associations between review content and star ratings.
+
+## 2. Research Questions
+
+This project addresses the following research questions:
+
+1. How are Starbucks customer reviews distributed across different star-rating levels?
+
+2. How does review length vary across different star-rating levels?
+
+3. Which words are most frequently used in Starbucks customer reviews, and how does word usage vary across rating groups?
+
+4. Which words are most distinctive across different rating groups based on TF-IDF?
+
+5. How does AFINN-based sentiment vary across different star-rating levels?
+
+6. To what extent are star ratings associated with AFINN sentiment scores and sentiment classifications?
+
+7. How are NRC emotion and sentiment categories distributed across different rating groups?
+
+## 3. Data Source and Data Collection
+
+The data used in this project come from the Yelp Open Dataset, a publicly available dataset containing information about businesses, reviews, users, and related interactions.
+
+For this analysis, the business and review files from the dataset were used. Starbucks businesses were identified from the business data, and their corresponding business IDs were used to extract Starbucks customer reviews from the review data.
+
+The resulting dataset contains 730 Starbucks businesses and 21,739 customer reviews. Each review includes information such as the review ID, business ID, star rating, review date, review text, and Yelp interaction measures including useful, funny, and cool votes.
+
+The extracted Starbucks review data were saved as a separate CSV file and subsequently imported into R for data preparation, text preprocessing, and analysis.
+
+## 4. Data Preparation and Text Preprocessing
+
+```{r load-data}
+reviews <- read_csv("data/starbucks_reviews.csv")
+```
+
+```{r inspect-data}
+glimpse(reviews)
+```
+
+```{r check-missing-values}
+colSums(is.na(reviews))
+```
+
+```{r check-duplicates}
+sum(duplicated(reviews$review_id))
+```
+
+```{r check-ratings}
+table(reviews$stars)
+```
+
+
+
+
+
+```{r check-review-dates}
+range(reviews$date)
+```
+
+
+
+
+```{r text-quality-check}
+sum(is.na(reviews$text))
+sum(trimws(reviews$text) == "")
+```
+
+```{r text-cleaning}
+
+reviews <- reviews %>%
+  mutate(
+    text_clean = text %>%
+      str_to_lower() %>%
+      str_remove_all("https?://\\S+|www\\.\\S+")
+  )
+
+
+reviews <- reviews %>%
+  mutate(
+    text_clean = text_clean %>%
+      str_remove_all("[[:punct:]]")
+  )
+
+
+reviews <- reviews %>%
+  mutate(
+    text_clean = text_clean %>%
+      str_squish()
+  )
+
+
+reviews %>%
+  select(text, text_clean) %>%
+  slice_head(n = 10)
+```
+
+```{r tokenization}
+
+review_words <- reviews %>%
+  select(review_id, stars, text_clean) %>%
+  unnest_tokens(word, text_clean)
+
+review_words <- review_words %>%
+  anti_join(stop_words, by = "word")
+
+review_words %>%
+  slice_head(n = 20)
+```
+
+```{r filter-text-tokens}
+review_words_clean <- review_words %>%
+  filter(
+    str_length(word) >= 3,
+    str_detect(word, "[a-z]")
+  )
+
+review_words_clean %>%
+  count(word, sort = TRUE) %>%
+  slice_head(n = 20)
+```
+
+
+## 5. Rating, Review Characteristics, and TF-IDF Analysis
+
+```{r rating-distribution}
+ggplot(reviews, aes(x = factor(stars))) +
+  geom_bar() +
+  labs(
+    title = "Distribution of Starbucks Review Ratings",
+    x = "Star Rating",
+    y = "Number of Reviews"
+  )
+```
+
+```{r rating-summary}
+summary(reviews$stars)
+```
+
+```{r review-year-distribution}
+reviews %>%
+  mutate(year = lubridate::year(date)) %>%
+  count(year)
+```
+
+```{r review-volume-over-time}
+reviews %>%
+  mutate(year = lubridate::year(date)) %>%
+  count(year) %>%
+  ggplot(aes(x = year, y = n)) +
+  geom_line() +
+  geom_point() +
+  labs(
+    title = "Number of Starbucks Reviews Over Time",
+    x = "Year",
+    y = "Number of Reviews"
+  )
+```
+
+
+```{r rating-percentage}
+reviews %>%
+  count(stars) %>%
+  mutate(
+    percentage = n / sum(n) * 100
+  )
+```
+```{r rating-percentage-plot}
+reviews %>%
+  count(stars) %>%
+  mutate(
+    percentage = n / sum(n) * 100
+  ) %>%
+  ggplot(aes(x = factor(stars), y = percentage)) +
+  geom_col() +
+  labs(
+    title = "Percentage Distribution of Starbucks Review Ratings",
+    x = "Star Rating",
+    y = "Percentage of Reviews"
+  )
+```
+```{r rating-groups}
+reviews %>%
+  mutate(
+    rating_group = case_when(
+      stars <= 2 ~ "Negative",
+      stars == 3 ~ "Neutral",
+      stars >= 4 ~ "Positive"
+    )
+  ) %>%
+  count(rating_group)
+```
+
+```{r rating-groups-plot}
+reviews %>%
+  mutate(
+    rating_group = case_when(
+      stars <= 2 ~ "Negative",
+      stars == 3 ~ "Neutral",
+      stars >= 4 ~ "Positive"
+    )
+  ) %>%
+  count(rating_group) %>%
+  ggplot(aes(x = rating_group, y = n)) +
+  geom_col() +
+  labs(
+    title = "Distribution of Rating Groups",
+    x = "Rating Group",
+    y = "Number of Reviews"
+  )
+```
+```{r review-length}
+reviews %>%
+  mutate(
+    word_count = str_count(text_clean, "\\S+")
+  ) %>%
+  summarise(
+    mean_words = mean(word_count),
+    median_words = median(word_count),
+    min_words = min(word_count),
+    max_words = max(word_count)
+  )
+```
+```{r review-length-distribution}
+reviews %>%
+  mutate(
+    word_count = str_count(text_clean, "\\S+")
+  ) %>%
+  ggplot(aes(x = word_count)) +
+  geom_histogram(bins = 50) +
+  labs(
+    title = "Distribution of Review Lengths",
+    x = "Number of Words",
+    y = "Number of Reviews"
+  )
+```
+```{r review-length-by-rating}
+reviews %>%
+  mutate(
+    word_count = str_count(text_clean, "\\S+")
+  ) %>%
+  group_by(stars) %>%
+  summarise(
+    mean_words = mean(word_count),
+    median_words = median(word_count)
+  )
+```
+```{r review-length-by-rating-plot}
+reviews %>%
+  mutate(
+    word_count = str_count(text_clean, "\\S+")
+  ) %>%
+  ggplot(aes(x = factor(stars), y = word_count)) +
+  geom_boxplot() +
+  labs(
+    title = "Review Length by Star Rating",
+    x = "Star Rating",
+    y = "Number of Words"
+  )
+```
+
+
+
+```{r review-level-tfidf}
+review_tfidf <- review_words_clean %>%
+  count(review_id, word) %>%
+  bind_tf_idf(
+    term = word,
+    document = review_id,
+    n = n
+  )
+review_tfidf
+```
+
+```{r add-rating-group-to-tfidf}
+review_tfidf <- review_tfidf %>%
+  left_join(
+    reviews %>%
+      mutate(
+        rating_group = case_when(
+          stars <= 2 ~ "Negative",
+          stars == 3 ~ "Neutral",
+          stars >= 4 ~ "Positive"
+        )
+      ) %>%
+      select(review_id, rating_group),
+    by = "review_id"
+  )
+
+review_tfidf
+```
+
+```{r tfidf-group-summary}
+review_tfidf %>%
+  group_by(rating_group, word) %>%
+  summarise(
+    mean_tf_idf = mean(tf_idf),
+    review_count = n_distinct(review_id),
+    .groups = "drop"
+  ) %>%
+  group_by(rating_group) %>%
+  arrange(desc(mean_tf_idf), .by_group = TRUE) %>%
+  slice_head(n = 20) %>%
+  ungroup()
+```
+
+```{r filter-tfidf-words}
+tfidf_group_summary <- review_tfidf %>%
+  group_by(rating_group, word) %>%
+  summarise(
+    mean_tf_idf = mean(tf_idf),
+    review_count = n_distinct(review_id),
+    .groups = "drop"
+  ) %>%
+  filter(review_count >= 50) %>%
+  arrange(rating_group, desc(mean_tf_idf))
+
+tfidf_group_summary
+```
+
+```{r top-tfidf-by-rating-group}
+tfidf_group_summary %>%
+  group_by(rating_group) %>%
+  slice_max(mean_tf_idf, n = 15) %>%
+  ungroup()
+```
+
+```{r tfidf-rating-group-plot}
+tfidf_group_summary %>%
+  group_by(rating_group) %>%
+  slice_max(mean_tf_idf, n = 10) %>%
+  ungroup() %>%
+  ggplot(aes(
+    x = reorder(word, mean_tf_idf),
+    y = mean_tf_idf
+  )) +
+  geom_col() +
+  coord_flip() +
+  facet_wrap(~ rating_group, scales = "free") +
+  labs(
+    title = "Most Distinctive Words by Rating Group",
+    x = "Word",
+    y = "Mean TF-IDF"
+  )
+```
+
+
+
+## 6. Word Frequency Analysis
+
+```{r top-word-frequency}
+review_words %>%
+  count(word, sort = TRUE) %>%
+  slice_head(n = 20) %>%
+  ggplot(aes(x = reorder(word, n), y = n)) +
+  geom_col() +
+  coord_flip() +
+  labs(
+    title = "Most Frequent Words in Starbucks Reviews",
+    x = "Word",
+    y = "Frequency"
+  )
+```
+
+```{r top-words-by-rating-group}
+review_words %>%
+  left_join(
+    reviews %>%
+      mutate(
+        rating_group = case_when(
+          stars <= 2 ~ "Negative",
+          stars == 3 ~ "Neutral",
+          stars >= 4 ~ "Positive"
+        )
+      ) %>%
+      select(review_id, rating_group),
+    by = "review_id"
+  ) %>%
+  count(rating_group, word, sort = TRUE) %>%
+  group_by(rating_group) %>%
+  slice_head(n = 10)
+```
+
+```{r top-negative-words}
+review_words %>%
+  left_join(
+    reviews %>%
+      mutate(
+        rating_group = case_when(
+          stars <= 2 ~ "Negative",
+          stars == 3 ~ "Neutral",
+          stars >= 4 ~ "Positive"
+        )
+      ) %>%
+      select(review_id, rating_group),
+    by = "review_id"
+  ) %>%
+  filter(rating_group == "Negative") %>%
+  count(word, sort = TRUE) %>%
+  slice_head(n = 20)
+```
+
+```{r top-positive-words}
+review_words %>%
+  left_join(
+    reviews %>%
+      mutate(
+        rating_group = case_when(
+          stars <= 2 ~ "Negative",
+          stars == 3 ~ "Neutral",
+          stars >= 4 ~ "Positive"
+        )
+      ) %>%
+      select(review_id, rating_group),
+    by = "review_id"
+  ) %>%
+  filter(rating_group == "Positive") %>%
+  count(word, sort = TRUE) %>%
+  slice_head(n = 20)
+```
+
+## 7. Sentiment Analysis
+
+```{r afinn-sentiment}
+
+afinn <- get_sentiments("afinn")
+
+afinn %>%
+  slice_head(n = 20)
+```
+```{r afinn-summary}
+afinn %>%
+  summarise(
+    total_words = n(),
+    min_score = min(value),
+    max_score = max(value)
+  )
+```
+```{r afinn-word-matching}
+review_sentiment_words <- review_words_clean %>%
+  inner_join(afinn, by = "word")
+
+review_sentiment_words %>%
+  slice_head(n = 20)
+```
+
+```{r afinn-review-score}
+review_sentiment <- review_sentiment_words %>%
+  group_by(review_id) %>%
+  summarise(
+    sentiment_score = sum(value),
+    .groups = "drop"
+  )
+
+review_sentiment %>%
+  slice_head(n = 20)
+```
+
+```{r afinn-score-summary}
+review_sentiment %>%
+  summarise(
+    mean_score = mean(sentiment_score),
+    median_score = median(sentiment_score),
+    min_score = min(sentiment_score),
+    max_score = max(sentiment_score)
+  )
+```
+
+```{r afinn-score-distribution}
+ggplot(review_sentiment, aes(x = sentiment_score)) +
+  geom_histogram(bins = 40) +
+  labs(
+    title = "Distribution of AFINN Sentiment Scores",
+    x = "AFINN Sentiment Score",
+    y = "Number of Reviews"
+  )
+```
+
+```{r rating-sentiment-data}
+rating_sentiment <- reviews %>%
+  select(review_id, stars) %>%
+  left_join(review_sentiment, by = "review_id")
+
+rating_sentiment %>%
+  slice_head(n = 20)
+```
+
+```{r sentiment-by-rating}
+rating_sentiment %>%
+  group_by(stars) %>%
+  summarise(
+    mean_sentiment = mean(sentiment_score, na.rm = TRUE),
+    median_sentiment = median(sentiment_score, na.rm = TRUE),
+    review_count = n(),
+    scored_reviews = sum(!is.na(sentiment_score))
+  )
+```
+
+```{r sentiment-by-rating-plot}
+rating_sentiment %>%
+  group_by(stars) %>%
+  summarise(
+    mean_sentiment = mean(sentiment_score, na.rm = TRUE)
+  ) %>%
+  ggplot(aes(x = factor(stars), y = mean_sentiment)) +
+  geom_col() +
+  labs(
+    title = "Mean AFINN Sentiment Score by Star Rating",
+    x = "Star Rating",
+    y = "Mean AFINN Sentiment Score"
+  )
+```
+```{r afinn-sentiment-groups}
+rating_sentiment %>%
+  mutate(
+    sentiment_group = case_when(
+      sentiment_score < 0 ~ "Negative",
+      sentiment_score == 0 ~ "Neutral",
+      sentiment_score > 0 ~ "Positive",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  count(sentiment_group)
+```
+```{r nrc-emotion-lexicon}
+nrc <- get_sentiments("nrc")
+
+nrc %>%
+  slice_head(n = 20)
+```
+
+```{r nrc-word-matching}
+review_nrc_words <- review_words_clean %>%
+  inner_join(nrc, by = "word")
+
+review_nrc_words %>%
+  slice_head(n = 20)
+```
+
+```{r nrc-emotion-frequency}
+nrc_emotion_frequency <- review_nrc_words %>%
+  count(sentiment, sort = TRUE)
+
+nrc_emotion_frequency
+```
+
+```{r nrc-emotion-percentage}
+nrc_emotion_percentage <- nrc_emotion_frequency %>%
+  mutate(
+    percentage = n / sum(n) * 100
+  )
+
+nrc_emotion_percentage
+```
+
+```{r nrc-emotion-percentage-plot}
+nrc_emotion_percentage %>%
+  ggplot(aes(x = reorder(sentiment, percentage),
+             y = percentage)) +
+  geom_col() +
+  coord_flip() +
+  labs(
+    title = "Distribution of NRC Emotion and Sentiment Categories",
+    x = "NRC Category",
+    y = "Percentage of NRC Word-Category Matches"
+  )
+```
+
+```{r nrc-by-rating-group}
+nrc_rating_groups <- review_nrc_words %>%
+  left_join(
+    reviews %>%
+      select(review_id, stars) %>%
+      mutate(
+        rating_group = case_when(
+          stars <= 2 ~ "Negative",
+          stars == 3 ~ "Neutral",
+          stars >= 4 ~ "Positive"
+        )
+      ),
+    by = "review_id"
+  ) %>%
+  count(rating_group, sentiment, sort = TRUE)
+
+nrc_rating_groups
+```
+
+```{r nrc-rating-group-percentage}
+nrc_rating_group_percentage <- nrc_rating_groups %>%
+  group_by(rating_group) %>%
+  mutate(
+    percentage = n / sum(n) * 100
+  ) %>%
+  ungroup()
+
+nrc_rating_group_percentage
+```
+
+```{r nrc-rating-group-plot}
+nrc_rating_group_percentage %>%
+  ggplot(aes(
+    x = rating_group,
+    y = percentage,
+    fill = sentiment
+  )) +
+  geom_col() +
+  labs(
+    title = "NRC Category Distribution by Rating Group",
+    x = "Rating Group",
+    y = "Percentage of NRC Word-Category Matches",
+    fill = "NRC Category"
+  )
+```
+
+```{r nrc-rating-group-summary}
+nrc_rating_group_summary <- nrc_rating_group_percentage %>%
+  group_by(rating_group) %>%
+  arrange(desc(percentage), .by_group = TRUE)
+
+nrc_rating_group_summary
+```
+
+
+## 8. Rating and Sentiment Comparison
+
+```{r rating-sentiment-comparison}
+rating_sentiment_comparison <- rating_sentiment %>%
+  mutate(
+    rating_group = case_when(
+      stars <= 2 ~ "Negative",
+      stars == 3 ~ "Neutral",
+      stars >= 4 ~ "Positive"
+    ),
+    sentiment_group = case_when(
+      sentiment_score < 0 ~ "Negative",
+      sentiment_score == 0 ~ "Neutral",
+      sentiment_score > 0 ~ "Positive",
+      TRUE ~ NA_character_
+    )
+  )
+
+rating_sentiment_comparison %>%
+  count(rating_group, sentiment_group)
+```
+
+```{r rating-sentiment-percentages}
+rating_sentiment_comparison %>%
+  count(rating_group, sentiment_group) %>%
+  group_by(rating_group) %>%
+  mutate(
+    percentage = n / sum(n) * 100
+  ) %>%
+  ungroup()
+```
+
+```{r rating-sentiment-comparison-plot}
+rating_sentiment_comparison %>%
+  count(rating_group, sentiment_group) %>%
+  group_by(rating_group) %>%
+  mutate(
+    percentage = n / sum(n) * 100
+  ) %>%
+  ungroup() %>%
+  ggplot(aes(
+    x = rating_group,
+    y = percentage,
+    fill = sentiment_group
+  )) +
+  geom_col() +
+  labs(
+    title = "Rating and AFINN Sentiment Comparison",
+    x = "Rating Group",
+    y = "Percentage of Reviews",
+    fill = "AFINN Sentiment"
+  )
+```
+```{r sentiment-distribution-by-rating}
+rating_sentiment_comparison %>%
+  filter(!is.na(sentiment_group)) %>%
+  count(stars, sentiment_group) %>%
+  group_by(stars) %>%
+  mutate(
+    percentage = n / sum(n) * 100
+  ) %>%
+  ungroup()
+```
+```{r rating-sentiment-correlation}
+rating_sentiment %>%
+  filter(!is.na(sentiment_score)) %>%
+  summarise(
+    spearman_correlation = cor(
+      stars,
+      sentiment_score,
+      method = "spearman"
+    )
+  )
+```
+
+
+
+## 9. Key Findings
+
+- The dataset contains 21,739 Starbucks reviews from 730 Starbucks businesses in the Yelp Open Dataset. The rating distribution is polarized, with 1-star and 5-star reviews representing the largest rating groups.
+
+- Mean review length varied across rating levels. For example, 2-star reviews averaged approximately 93 words, while 5-star reviews averaged approximately 66 words.
+
+- TF-IDF analysis identified distinctive vocabulary across rating groups. Negative reviews included terms such as understaffed, unfriendly, disrespectful, and slowest, while positive reviews included terms such as speedy, nicest, friendliest, and cheerful. These differences describe vocabulary patterns across rating groups; however, TF-IDF measures word distinctiveness rather than sentiment.
+
+- AFINN sentiment scores generally increased across star-rating levels. The mean sentiment score ranged from −3.22 for 1-star reviews to 6.31 for 5-star reviews. The Spearman correlation between star ratings and AFINN sentiment scores was 0.639, indicating a moderate positive association between the two measures.
+
+- The relationship between star ratings and AFINN sentiment classifications was not perfectly consistent. Among reviews with an AFINN sentiment score, 73.4% of 1-star reviews were classified as negative, while 91.5% of 5-star reviews were classified as positive. Some reviews showed different rating and sentiment classifications, highlighting the limitations of lexicon-based sentiment analysis and the importance of textual context.
+
+- NRC analysis revealed differences in the distribution of emotion-related word categories across rating groups. In the overall review corpus, positive, anticipation, and trust were among the most frequent NRC categories. Compared with negative and neutral rating groups, positive-rated reviews contained a higher share of NRC word matches associated with positive, trust, and joy, while negative-rated reviews contained higher shares of categories such as negative, anger, and sadness. These results describe patterns in emotion-related vocabulary identified by the NRC lexicon and should not be interpreted as direct measures of customers' psychological emotions.
+
+
+
+## 10. Limitations and Conclusion
+
+### Limitations
+This analysis has several limitations that should be considered when interpreting the results.
+
+First, the Yelp Open Dataset does not represent all Starbucks customers or all Starbucks locations. The findings therefore describe the reviews included in this dataset and should not be generalized to the entire Starbucks customer population.
+
+Second, the sentiment analysis relies on the AFINN lexicon, which assigns predefined sentiment scores to individual words. This approach does not fully capture context, negation, sarcasm, or interactions between words. As a result, some reviews may receive sentiment scores that do not fully reflect their overall meaning.
+
+Third, AFINN sentiment scores can be affected by review length because longer reviews may contain a larger number of sentiment-bearing words. Therefore, sentiment scores should not be interpreted as direct measures of the intensity of customer satisfaction.
+
+Fourth, the NRC analysis is also lexicon-based and identifies emotion-related categories through predefined word matches. These categories reflect patterns in the vocabulary used in the reviews rather than direct measurements of customers' psychological emotions. Context, negation, sarcasm, and word usage may therefore affect the classification of individual words.
+
+Fifth, TF-IDF identifies words that are distinctive within a group rather than words that are necessarily positive or negative. Consequently, the presence of a word with a high TF-IDF score should not be interpreted as evidence of a particular sentiment.
+
+Finally, the analysis is primarily descriptive and focuses on associations between ratings and textual characteristics. The observed relationships should not be interpreted as causal effects. In addition, the 2022 review data cover only part of the year and therefore should not be directly compared with complete calendar years.
+
+
+### Conclusion
+
+This project analyzed 21,739 Starbucks customer reviews from the Yelp Open Dataset using text mining and sentiment analysis techniques in R. The analysis examined review ratings, review length, word frequencies, TF-IDF scores, and lexicon-based sentiment measures to identify patterns in customer reviews.
+
+The results showed a moderate positive association between star ratings and AFINN sentiment scores. Mean AFINN sentiment scores increased across the rating levels, ranging from −3.22 for 1-star reviews to 6.31 for 5-star reviews, while the Spearman correlation between star ratings and sentiment scores was 0.639. However, the comparison between star ratings and AFINN sentiment classifications also showed that the two measures did not always agree, highlighting the limitations of automated lexicon-based sentiment analysis.
+
+The TF-IDF analysis identified vocabulary that was distinctive across rating groups, while the NRC analysis revealed differences in the distribution of emotion-related word categories across these groups. Together, these analyses demonstrate how different text-mining and sentiment-analysis methods can provide complementary perspectives on customer reviews. At the same time, the findings should be interpreted in the context of the dataset and the limitations of lexicon-based methods.
+
+Overall, the project demonstrates a practical application of R for processing customer reviews, extracting textual patterns, and combining descriptive text analysis with sentiment analysis.
+
+
+
+
