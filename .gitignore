@@ -4,3 +4,5 @@ data/yelp_academic_dataset_review.json
 .Rhistory
 .Rproj.user/
 .idea/
+
+*.html
